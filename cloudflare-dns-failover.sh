@@ -33,8 +33,8 @@ update_record() {
 		jq -r .success)
 
 	if [[ $result == "true" ]]; then
-		log-no-repeat "$CF_RECORD updated to: $ip (previous: $cf_ip)"
-		cf_ip="$ip" # Update A record IP variable to reflect the change in our main loop
+		log-no-repeat "$CF_RECORD updated to: $ip (previous: $active_ip)"
+		active_ip="$ip" # Update A record IP variable to reflect the change in our main loop
 	else
 		log-no-repeat "ERROR: $CF_RECORD update failed!"
 	fi
@@ -46,24 +46,26 @@ initial_data=$(curl -s \
 	-H "Authorization: Bearer $CF_API_TOKEN")
 
 record_id=$(jq -r '.result[0].id' <<< "$initial_data") # Extract record ID for use in updates later
-cf_ip=$(jq -r '.result[0].content' <<< "$initial_data") # Extract current A record's IP
+active_ip=$(jq -r '.result[0].content' <<< "$initial_data") # Extract current A record's IP
 
 # Main loop to check IP responsiveness and update A record if necessary
 while true; do
 	for ip in ${SERVER_IPS//,/ }; do
-		if ping -q -W5 -c1 "$ip" &> /dev/null; then
-			if [[ "$cf_ip" != "$ip" ]]; then
-				update_record "$ip"
-				break
-			else
-				log-no-repeat "$CF_RECORD already set to $ip"
-				break
-			fi
+		if ! ping -q -W5 -c1 "$ip" &> /dev/null; then
+			continue
+		fi
+
+		if [[ "$active_ip" != "$ip" ]]; then
+			update_record "$ip"
+			break
+		else
+			log-no-repeat "$CF_RECORD already set to $ip"
+			break
 		fi
 	done
 
 	# After trying all IPs, log error if no responsive IP was set as the current one
-	if [[ "$cf_ip" != "$ip" ]]; then
+	if [[ "$active_ip" != "$ip" ]]; then
 		log-no-repeat "ERROR: No responsive IP found!"
 	fi
 
