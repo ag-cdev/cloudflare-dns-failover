@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -20,8 +21,16 @@ type Record struct {
 }
 
 func parseConfig() (Config, error) {
-	viper.SetConfigName("config")
-	viper.AddConfigPath(".")
+	var configPath string
+	pflag.StringVarP(&configPath, "config", "c", "", "Path to config file")
+	pflag.Parse()
+
+	if configPath != "" {
+		viper.SetConfigFile(configPath)
+	} else {
+		viper.SetConfigName("config")
+		viper.AddConfigPath(".")
+	}
 
 	var cfg Config
 

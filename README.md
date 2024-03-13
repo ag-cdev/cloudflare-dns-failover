@@ -39,6 +39,12 @@ To start the DNS failover mechanism, simply run the program:
 ./cloudflare-dns-failover
 ```
 
+This assumes that `config.yml` exists in the working directory. You can, however, pass its path as a flag:
+
+```bash
+./cloudflare-dns-failover -c /path/to/config.yml
+```
+
 The program executes in an infinite loop, checking the availability of the servers at the specified interval and updating the DNS record as needed.
 
 To maintain continuous operation, ensure that the program is running in a stable environment (e.g. as a `systemd` service or perhaps even as an orchestrated `exec` job in a [Nomad](https://www.nomadproject.io/) cluster).
