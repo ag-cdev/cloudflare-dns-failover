@@ -11,5 +11,6 @@ RUN go build -buildvcs=false -ldflags="-w -s" -o ./cloudflare-dns-failover
 FROM scratch
 
 COPY --from=builder /build/cloudflare-dns-failover /bin/cloudflare-dns-failover
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 ENTRYPOINT ["/bin/cloudflare-dns-failover"]
