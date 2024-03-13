@@ -1,0 +1,25 @@
+api_key: "my-api-key"
+check_interval: 10
+dns_records:
+  - domain: "*.mydomain.com"
+    zone_id: "the-zone-id"
+    proxied: false
+    ips:
+      - "10.10.10.10"
+      - "10.10.10.11"
+      - "10.10.10.12"
+
+  - domain: "mydomain.com"
+    zone_id: "the-zone-id"
+    proxied: false
+    ips:
+      - "10.10.10.13"
+      - "10.10.10.14"
+      - "10.10.10.15"
+
+  - domain: "*.myotherdomain.com"
+    zone_id: "the-zone-id"
+    proxied: false
+    ips:
+      - "10.10.10.16"
+      - "10.10.10.17"
