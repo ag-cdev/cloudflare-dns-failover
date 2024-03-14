@@ -64,7 +64,7 @@ func main() {
 					return
 				}
 
-				manageDNS(ctx, api, httpClient, r, s, ip, logCh)
+				manageDNS(ctx, api, r, s, ip, logCh)
 			}(httpClient, r, dnsStates[r.Domain], logCh)
 		}
 

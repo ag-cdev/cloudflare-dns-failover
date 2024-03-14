@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"sync"
 
 	cf "github.com/cloudflare/cloudflare-go"
@@ -52,7 +51,7 @@ func updateARecord(ctx context.Context, api *cf.API, r Record, s *DNSState, ip s
 	return err
 }
 
-func manageDNS(ctx context.Context, api *cf.API, httpClient *http.Client, r Record, s *DNSState, responsiveIP string, logCh chan<- logEntry) {
+func manageDNS(ctx context.Context, api *cf.API, r Record, s *DNSState, responsiveIP string, logCh chan<- logEntry) {
 	activeIP := s.GetActiveIP()
 	if activeIP == responsiveIP {
 		sendLogEntry(logCh, r.Domain, fmt.Sprintf("%s: already set to %s", r.Domain, responsiveIP))
