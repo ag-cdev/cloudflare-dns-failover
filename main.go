@@ -31,12 +31,10 @@ func main() {
 		activeRecord, err := fetchARecords(api, ctx, record)
 		if err != nil {
 			log.Panicf("Error fetching DNS record for %v: %v", record.Domain, err)
-			return
 		}
 
 		if len(activeRecord) == 0 {
 			log.Panicf("No DNS records found for %v: %v", record.Domain, err)
-			return
 		}
 
 		// Pointer to struct to reflect state across funcs, goroutines, etc.
