@@ -29,7 +29,7 @@ func createHTTPClient() *http.Client {
 }
 
 // isResponsive can handle HTTP(S) or raw TCP checks
-func isResponsive(client *http.Client, protocol string, ip string, port int) (bool, error) {
+func isResponsive(client *http.Client, protocol string, ip string, port int, hostname string) (bool, error) {
 	// Wrap IPv6 in brackets for URL or TCP target
 	host := ip
 	if net.ParseIP(ip) != nil && strings.Contains(ip, ":") {
@@ -39,7 +39,18 @@ func isResponsive(client *http.Client, protocol string, ip string, port int) (bo
 	switch protocol {
 	case "http", "https":
 		url := fmt.Sprintf("%s://%s:%d", protocol, host, port)
-		resp, err := client.Get(url)
+
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return false, err
+		}
+
+		// Override Host header for TLS SNI and cert validation
+		if hostname != "" {
+			req.Host = hostname
+		}
+
+		resp, err := client.Do(req)
 		if err != nil {
 			return false, err
 		}
@@ -65,7 +76,7 @@ func getResponsiveIP(httpClient *http.Client, r Record, protocol string, port in
 	var responsiveIP string
 
 	for _, ip := range r.IPs {
-		ok, err := isResponsive(httpClient, protocol, ip, port)
+		ok, err := isResponsive(httpClient, protocol, ip, port, r.Domain)
 		if err != nil {
 			sendLogEntry(logCh, r.Domain, fmt.Sprintf("%s: Error checking %s://%s:%d: %v", r.Domain, protocol, ip, port, err))
 			continue
