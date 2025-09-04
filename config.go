@@ -14,10 +14,12 @@ type Config struct {
 }
 
 type Record struct {
-	Domain  string   `mapstructure:"domain"`
-	ZoneID  string   `mapstructure:"zone_id"`
-	Proxied bool     `mapstructure:"proxied"`
-	IPs     []string `mapstructure:"ips"`
+	Domain   string   `mapstructure:"domain"`
+	ZoneID   string   `mapstructure:"zone_id"`
+	Proxied  bool     `mapstructure:"proxied"`
+	IPs      []string `mapstructure:"ips"`
+	Protocol string   `mapstructure:"protocol"`
+	Port     int      `mapstructure:"port"`
 }
 
 func parseConfig() (Config, error) {
@@ -44,5 +46,18 @@ func parseConfig() (Config, error) {
 		return cfg, fmt.Errorf("Unable to decode config into struct, %v", err)
 	}
 
+	// Apply defaults if missing
+	for i := range cfg.Records {
+		if cfg.Records[i].Protocol == "" {
+			cfg.Records[i].Protocol = "http"
+		}
+		if cfg.Records[i].Port == 0 {
+			if cfg.Records[i].Protocol == "https" {
+				cfg.Records[i].Port = 443
+			} else {
+				cfg.Records[i].Port = 80
+			}
+		}
+	}
 	return cfg, nil
 }

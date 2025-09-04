@@ -4,82 +4,95 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"sync"
 	"time"
 )
 
 func main() {
-	// Strip log timestamp to catch repeated messages in main loop
-	log := log.New(customLogWriter{}, "", 0)
+	// Use a distinct name for the logger to avoid shadowing the log package
+	logger := log.New(customLogWriter{}, "", 0)
 
 	cfg, err := parseConfig()
 	if err != nil {
-		log.Panic(err)
+		logger.Panic(err)
 	}
 
 	ctx := context.Background()
 	httpClient := createHTTPClient()
 	api, err := createAPIClient(cfg.APIKey)
 	if err != nil {
-		log.Panic(err)
+		logger.Panic(err)
 	}
 
-	// Fetch initial DNS states to be kept updated without additional API calls
+	// Fetch initial DNS states
 	dnsStates := make(map[string]*DNSState)
 	for _, record := range cfg.Records {
-		activeRecord, err := fetchARecords(api, ctx, record)
+		activeRecords, err := fetchDNSRecords(api, ctx, record)
 		if err != nil {
-			log.Panicf("Error fetching DNS record for %v: %v", record.Domain, err)
+			logger.Panicf("Error fetching DNS record for %v: %v", record.Domain, err)
 		}
-
-		if len(activeRecord) == 0 {
-			log.Panicf("No DNS records found for %v: %v", record.Domain, err)
+		if len(activeRecords) == 0 {
+			logger.Panicf("No DNS records found for %v", record.Domain)
 		}
+		for _, rec := range activeRecords {
+			if rec.Type != "A" && rec.Type != "AAAA" {
+				continue // skip other types like CNAME, TXT, etc.
+			}
 
-		// Pointer to struct to reflect state across funcs, goroutines, etc.
-		dnsStates[record.Domain] = &DNSState{
-			ActiveIP: activeRecord[0].Content,
-			ID:       activeRecord[0].ID,
+			key := fmt.Sprintf("%s|%s", record.Domain, rec.Type) // unique key per type
+			dnsStates[key] = &DNSState{
+				ActiveIP:   rec.Content,
+				ID:         rec.ID,
+				RecordType: rec.Type,
+			}
 		}
 	}
 
 	lastLogMsgs := make(map[string]string)
-	var wg sync.WaitGroup
 
 	for {
 		logCh := make(chan logEntry, len(cfg.Records))
+		var wg sync.WaitGroup // reset each loop
 
+		// Spawn workers
 		for _, r := range cfg.Records {
 			wg.Add(1)
-
-			go func(httpClient *http.Client, r Record, s *DNSState, logCh chan logEntry) {
+			go func(r Record) {
 				defer wg.Done()
-
-				ip, err := getResponsiveIP(httpClient, r, logCh)
+				// Step 1: Get the responsive IP from your logic
+				ip, err := getResponsiveIP(httpClient, r, r.Protocol, r.Port, logCh)
 				if err != nil {
-					sendLogEntry(logCh, r.Domain, fmt.Sprintf("%s: Error getting responsive IP: %v", r.Domain, err))
+					sendLogEntry(logCh, r.Domain, fmt.Sprintf("Error getting responsive IP: %v", err))
 					return
 				}
+				// Step 2: Detect type from the IP string
+				recType := detectRecordType(ip)
+				// Step 3: Build the composite key and fetch the right DNSState
+				key := fmt.Sprintf("%s|%s", r.Domain, recType)
+				state, ok := dnsStates[key]
+				if !ok {
+					sendLogEntry(logCh, r.Domain, fmt.Sprintf("No DNS state found for %s", key))
+					return
+				}
+				// Step 4: Pass along to your update logic
+				manageDNS(ctx, api, r, state, ip, logCh)
 
-				manageDNS(ctx, api, r, s, ip, logCh)
-			}(httpClient, r, dnsStates[r.Domain], logCh)
+			}(r)
 		}
 
-		// Log without consecutive repetitions since we're running in a loop
+		// Log reader (single goroutine per loop)
 		go func() {
 			for entry := range logCh {
 				if lastLogMsgs[entry.domain] != entry.msg {
-					log.Printf("[%s]: %s\n", entry.timestamp.Format("2006-01-02 15:04:05"), entry.msg)
+					logger.Printf("[%s]: %s\n", entry.timestamp.Format("2006-01-02 15:04:05"), entry.msg)
 					lastLogMsgs[entry.domain] = entry.msg
 				}
 			}
 		}()
 
-		go func() {
-			wg.Wait()
-			close(logCh)
-		}()
+		// Close logCh after all workers finish
+		wg.Wait()
+		close(logCh)
 
 		time.Sleep(time.Duration(cfg.CheckInterval) * time.Second)
 	}

@@ -3,15 +3,17 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
 
 	cf "github.com/cloudflare/cloudflare-go"
 )
 
 type DNSState struct {
-	ActiveIP string
-	ID       string
-	Mutex    sync.RWMutex
+	ActiveIP   string
+	ID         string
+	RecordType string
+	Mutex      sync.RWMutex
 }
 
 func (s *DNSState) UpdateActiveIP(newIP string) {
@@ -32,21 +34,33 @@ func (s *DNSState) GetID() string {
 	return s.ID
 }
 
-func fetchARecords(api *cf.API, ctx context.Context, r Record) ([]cf.DNSRecord, error) {
-	records, _, err := api.ListDNSRecords(ctx, cf.ZoneIdentifier(r.ZoneID), cf.ListDNSRecordsParams{Name: r.Domain, Type: "A"})
+func detectRecordType(ip string) string {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return "A" // default fallback
+	}
+	if parsed.To4() != nil {
+		return "A"
+	}
+	return "AAAA"
+}
+
+func fetchDNSRecords(api *cf.API, ctx context.Context, r Record) ([]cf.DNSRecord, error) {
+	records, _, err := api.ListDNSRecords(ctx, cf.ZoneIdentifier(r.ZoneID),
+		cf.ListDNSRecordsParams{Name: r.Domain})
 	return records, err
 }
 
-func updateARecord(ctx context.Context, api *cf.API, r Record, s *DNSState, ip string) error {
+func updateDNSRecord(ctx context.Context, api *cf.API, r Record, s *DNSState, ip string) error {
+	recordType := detectRecordType(ip)
 	updateRecord := cf.UpdateDNSRecordParams{
-		Type:    "A",
+		Type:    recordType,
 		Name:    r.Domain,
 		Content: ip,
 		ID:      s.GetID(),
 		TTL:     1,
 		Proxied: &r.Proxied,
 	}
-
 	_, err := api.UpdateDNSRecord(ctx, cf.ZoneIdentifier(r.ZoneID), updateRecord)
 	return err
 }
@@ -58,8 +72,7 @@ func manageDNS(ctx context.Context, api *cf.API, r Record, s *DNSState, responsi
 		return
 	}
 
-	err := updateARecord(ctx, api, r, s, responsiveIP)
-	if err != nil {
+	if err := updateDNSRecord(ctx, api, r, s, responsiveIP); err != nil {
 		sendLogEntry(logCh, r.Domain, fmt.Sprintf("%s: DNS update failed: %v", r.Domain, err))
 		return
 	}
